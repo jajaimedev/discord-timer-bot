@@ -1,15 +1,58 @@
 import discord
 from discord.ext import commands
-import json
 import os
+from dotenv import load_dotenv
+import json
 from datetime import datetime, timedelta
 import asyncio
-from dotenv import load_dotenv
+from threading import Thread
+from flask import Flask, jsonify
 
+# Cargar variables de entorno
+load_dotenv()
 
+# ===== SERVIDOR WEB PARA RENDER =====
+app = Flask(__name__)
 
+@app.route('/')
+def home():
+    if hasattr(bot, 'user') and bot.user:
+        return f"""
+        <h1>🤖 Bot Discord Activo</h1>
+        <p><strong>Bot:</strong> {bot.user}</p>
+        <p><strong>Servidores:</strong> {len(bot.guilds)}</p>
+        <p><strong>Uptime:</strong> {datetime.now() - bot.start_time if hasattr(bot, 'start_time') else 'Iniciando...'}</p>
+        <p><strong>Status:</strong> ✅ Online</p>
+        """
+    else:
+        return "<h1>🤖 Bot Discord</h1><p>🔄 Conectando...</p>"
 
-# Configuración del bot
+@app.route('/health')
+def health():
+    return jsonify({
+        "status": "alive",
+        "bot": str(bot.user) if hasattr(bot, 'user') and bot.user else "connecting",
+        "guilds": len(bot.guilds) if hasattr(bot, 'guilds') else 0,
+        "uptime": str(datetime.now() - bot.start_time) if hasattr(bot, 'start_time') else None
+    })
+
+@app.route('/ping')
+def ping():
+    return "pong"
+
+def run_flask():
+    # Render provee el puerto en la variable PORT
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port, debug=False)
+
+def keep_alive():
+    """Inicia el servidor web en un hilo separado"""
+    server_thread = Thread(target=run_flask)
+    server_thread.daemon = True
+    server_thread.start()
+    print(f"🌐 Servidor web iniciado en puerto {os.environ.get('PORT', 10000)}")
+
+# ===== BOT DISCORD =====
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -44,12 +87,14 @@ def format_time(delta):
 
 @bot.event
 async def on_ready():
-    print(f'{bot.user} está conectado!')
+    bot.start_time = datetime.now()
+    print(f'✅ {bot.user} conectado exitosamente!')
+    print(f'📊 Bot está en {len(bot.guilds)} servidor(es)')
     try:
         synced = await bot.tree.sync()
-        print(f"Sincronizados {len(synced)} comandos slash")
+        print(f'🔄 Sincronizados {len(synced)} comandos slash')
     except Exception as e:
-        print(f"Error al sincronizar comandos: {e}")
+        print(f'❌ Error sincronizando comandos: {e}')
 
 # Comandos del Timer
 @bot.tree.command(name="timer_start", description="Iniciar el cronómetro")
@@ -132,7 +177,7 @@ async def add_strike(interaction: discord.Interaction, usuario: discord.Member):
         data["strikes"][user_id] = {"name": usuario.display_name, "count": 0}
     
     data["strikes"][user_id]["count"] += 1
-    data["strikes"][user_id]["name"] = usuario.display_name  # Actualizar nombre
+    data["strikes"][user_id]["name"] = usuario.display_name
     save_data(data)
     
     embed = discord.Embed(
@@ -154,7 +199,6 @@ async def show_strikes(interaction: discord.Interaction):
             color=discord.Color.green()
         )
     else:
-        # Ordenar por cantidad de strikes (mayor a menor)
         sorted_strikes = sorted(strikes.items(), key=lambda x: x[1]["count"], reverse=True)
         
         description = ""
@@ -171,7 +215,6 @@ async def show_strikes(interaction: discord.Interaction):
 
 @bot.tree.command(name="strikes_reset", description="Resetear todos los strikes")
 async def reset_strikes(interaction: discord.Interaction):
-    # Solo admins pueden resetear strikes
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("❌ Solo los administradores pueden resetear strikes!", ephemeral=True)
         return
@@ -189,7 +232,6 @@ async def reset_strikes(interaction: discord.Interaction):
 
 @bot.tree.command(name="remove_strike", description="Quitar un strike a un usuario")
 async def remove_strike(interaction: discord.Interaction, usuario: discord.Member):
-    # Solo admins pueden quitar strikes
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("❌ Solo los administradores pueden quitar strikes!", ephemeral=True)
         return
@@ -215,7 +257,6 @@ async def remove_strike(interaction: discord.Interaction, usuario: discord.Membe
     )
     await interaction.response.send_message(embed=embed)
 
-# Comando de ayuda
 @bot.tree.command(name="help_timer", description="Ver todos los comandos disponibles")
 async def help_command(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -243,18 +284,40 @@ async def help_command(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed)
 
-# Ejecutar el bot
+@bot.tree.command(name="render_status", description="Ver estado del hosting en Render")
+async def render_status(interaction: discord.Interaction):
+    uptime = datetime.now() - bot.start_time if hasattr(bot, 'start_time') else "Desconocido"
+    
+    embed = discord.Embed(
+        title="🌐 Estado de Render",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Hosting", value="Render.com", inline=True)
+    embed.add_field(name="Uptime", value=str(uptime).split('.')[0], inline=True)
+    embed.add_field(name="Servidores", value=len(bot.guilds), inline=True)
+    embed.add_field(name="Puerto Web", value=os.environ.get('PORT', '10000'), inline=True)
+    
+    await interaction.response.send_message(embed=embed)
+
+# ===== EJECUCIÓN PRINCIPAL =====
 if __name__ == "__main__":
-    #lineas que no reconoce render
-    #TOKEN = 'AQUI VA TU TOKEN'
-    #bot.run(TOKEN)
-    load_dotenv()
+    # Verificar token
     TOKEN = os.getenv('DISCORD_TOKEN')
-
-if not TOKEN:
-    print("❌ Error: DISCORD_TOKEN no encontrado")
-    print("Configura la variable de entorno DISCORD_TOKEN")
-    exit(1)
-
-print("🚀 Iniciando bot en Render...")
-bot.run(TOKEN)
+    if not TOKEN:
+        print("❌ ERROR: DISCORD_TOKEN no encontrado!")
+        print("🔧 SOLUCIONES:")
+        print("   - Local: Crea archivo .env con DISCORD_TOKEN=tu_token")  
+        print("   - Hosting: Configura variable de entorno DISCORD_TOKEN")
+        exit(1)
+    
+    # Iniciar servidor web (para Render)
+    keep_alive()
+    
+    # Iniciar bot
+    print("🚀 Iniciando bot...")
+    try:
+        bot.run(TOKEN)
+    except discord.LoginFailure:
+        print("❌ Token inválido! Verifica tu DISCORD_TOKEN")
+    except Exception as e:
+        print(f"❌ Error inesperado: {e}")
