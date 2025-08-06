@@ -6,14 +6,16 @@ import json
 from datetime import datetime, timedelta
 import asyncio
 from threading import Thread
-from flask import Flask, jsonify
+#from flask import Flask, jsonify
 
 # Cargar variables de entorno
 load_dotenv()
 
 # ===== SERVIDOR WEB PARA RENDER =====
-app = Flask(__name__)
+#app = Flask(__name__)
 
+##########################
+ 
 @app.route('/')
 def home():
     if hasattr(bot, 'user') and bot.user:
@@ -40,17 +42,18 @@ def health():
 def ping():
     return "pong"
 
-def run_flask():
+"""def run_flask():
     # Render provee el puerto en la variable PORT
     port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False)"""
 
-def keep_alive():
-    """Inicia el servidor web en un hilo separado"""
-    server_thread = Thread(target=run_flask)
-    server_thread.daemon = True
-    server_thread.start()
-    print(f"🌐 Servidor web iniciado en puerto {os.environ.get('PORT', 10000)}")
+#def keep_alive():
+    #"""Inicia el servidor web en un hilo separado"""
+    #server_thread = Thread(target=run_flask)
+    #server_thread.daemon = True
+    #server_thread.start()
+    #print(f"🌐 Servidor web iniciado en puerto {os.environ.get('PORT', 10000)}")
+
 
 # ===== BOT DISCORD =====
 intents = discord.Intents.default()
@@ -305,19 +308,17 @@ if __name__ == "__main__":
     TOKEN = os.getenv('DISCORD_TOKEN')
     if not TOKEN:
         print("❌ ERROR: DISCORD_TOKEN no encontrado!")
-        print("🔧 SOLUCIONES:")
-        print("   - Local: Crea archivo .env con DISCORD_TOKEN=tu_token")  
-        print("   - Hosting: Configura variable de entorno DISCORD_TOKEN")
+        print("Configura variable de entorno DISCORD_TOKEN")
         exit(1)
     
     # Iniciar servidor web (para Render)
-    keep_alive()
+    #keep_alive()
     
     # Iniciar bot
     print("🚀 Iniciando bot...")
     try:
         bot.run(TOKEN)
     except discord.LoginFailure:
-        print("❌ Token inválido! Verifica tu DISCORD_TOKEN")
+        print("❌ Token inválido!")
     except Exception as e:
         print(f"❌ Error inesperado: {e}")
